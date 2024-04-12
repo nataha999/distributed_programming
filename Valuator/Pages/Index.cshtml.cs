@@ -54,6 +54,11 @@ public class IndexModel : PageModel
 
         string id = Guid.NewGuid().ToString();
 
+        string similarityKey = "SIMILARITY-" + id;
+        //TODO: посчитать similarity и сохранить в БД по ключу similarityKey
+        int similarity = GetSimilarity(text, id);
+        _storage.Set(similarityKey, similarity.ToString());
+
         string textKey = "TEXT-" + id;
         //TODO: сохранить в БД text по ключу textKey
         _storage.Set(textKey, text);
@@ -62,11 +67,6 @@ public class IndexModel : PageModel
         //TODO: посчитать rank и сохранить в БД по ключу rankKey
         string rank = GetRank(text);
         _storage.Set(rankKey, rank);
-
-        string similarityKey = "SIMILARITY-" + id;
-        //TODO: посчитать similarity и сохранить в БД по ключу similarityKey
-        int similarity = GetSimilarity(text, id);
-        _storage.Set(similarityKey, similarity.ToString());
 
         return Redirect($"summary?id={id}");
     }
