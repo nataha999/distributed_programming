@@ -22,9 +22,13 @@ public class IndexModel : PageModel
 
     private static string GetRank(string text)
     {
+        if (String.IsNullOrEmpty(text))
+            return "0";
+
         double nonalphaCounter = 0;
 
-        foreach (var ch in text) {
+        foreach (var ch in text)
+        {
             if (!Char.IsLetter(ch))
             {
                 nonalphaCounter++;
@@ -34,7 +38,7 @@ public class IndexModel : PageModel
         return Convert.ToString(nonalphaCounter / text.Length);
     }
 
-    private int GetSimilarity(string text, string key)
+    private int GetSimilarity(string text)
     {
         var keys = _storage.GetKeys();
         string textPrefix = "TEXT-";
@@ -50,13 +54,16 @@ public class IndexModel : PageModel
 
     public IActionResult OnPost(string text)
     {
+        if (string.IsNullOrEmpty(text))
+            Redirect($"index");
+
         _logger.LogDebug(text);
 
         string id = Guid.NewGuid().ToString();
 
         string similarityKey = "SIMILARITY-" + id;
         //TODO: посчитать similarity и сохранить в БД по ключу similarityKey
-        int similarity = GetSimilarity(text, id);
+        int similarity = GetSimilarity(text);
         _storage.Set(similarityKey, similarity.ToString());
 
         string textKey = "TEXT-" + id;
