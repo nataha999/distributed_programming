@@ -1,6 +1,7 @@
-﻿using StackExchange.Redis;
+﻿using Microsoft.Extensions.Configuration;
+using StackExchange.Redis;
 
-namespace Valuator.Redis
+namespace Valuator
 {
     public class RedisStorage : IRedisStorage
     {
@@ -12,13 +13,6 @@ namespace Valuator.Redis
             _сonfiguration = configuration;
             var host = _сonfiguration["RedisValues:HOST_NAME"];
             _connection = ConnectionMultiplexer.Connect(host);
-        }
-
-        public void Set(string key, string value)
-        {
-            var db = _connection.GetDatabase();
-
-            db.StringSet(key, value);
         }
 
         public string Get(string key)
@@ -35,6 +29,13 @@ namespace Valuator.Redis
             var keys = _connection.GetServer(host, port).Keys();
 
             return keys.Select(item => item.ToString()).ToList();
+        }
+
+        public void Set(string key, string value)
+        {
+            var db = _connection.GetDatabase();
+
+            db.StringSet(key, value);
         }
     }
 }

@@ -7,9 +7,15 @@ public class Program
     {
         var builder = WebApplication.CreateBuilder(args);
 
-        // Add services to the container.
-        builder.Services.AddRazorPages();
+        builder.Services.AddStackExchangeRedisCache(options =>
+        {
+            options.Configuration = "localhost:6379";
+        });
+
         builder.Services.AddSingleton<IRedisStorage, RedisStorage>();
+        builder.Services.AddRazorPages();
+
+        builder.Services.AddDistributedMemoryCache();
 
         var app = builder.Build();
 

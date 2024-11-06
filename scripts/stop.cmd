@@ -1,4 +1,6 @@
 @echo off
 
-taskkill /f /IM dotnet.exe
+taskkill /f /IM valuator.exe
 taskkill /f /IM nginx.exe
+taskkill /f /IM rankCalculator.exe
+taskkill /f /IM nats-server.exe

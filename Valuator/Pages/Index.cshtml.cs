@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using NATS.Client;
+using System.Text;
 using Valuator.Redis;
 
 namespace Valuator.Pages;
@@ -20,22 +22,19 @@ public class IndexModel : PageModel
 
     }
 
-    private static string GetRank(string text)
+    static async Task ProduceAsync(CancellationToken ct, string id)
     {
-        if (String.IsNullOrEmpty(text))
-            return "0";
+        ConnectionFactory cf = new ConnectionFactory();
 
-        double nonalphaCounter = 0;
-
-        foreach (var ch in text)
+        using (IConnection c = cf.CreateConnection())
         {
-            if (!Char.IsLetter(ch))
-            {
-                nonalphaCounter++;
-            }
-        }
+            byte[] data = Encoding.UTF8.GetBytes(id);
+            c.Publish("valuator.processing.rank", data);
+            await Task.Delay(1000);
+            c.Drain();
 
-        return Convert.ToString(nonalphaCounter / text.Length);
+            c.Close();
+        }
     }
 
     private int GetSimilarity(string text)
@@ -55,7 +54,7 @@ public class IndexModel : PageModel
     public IActionResult OnPost(string text)
     {
         if (string.IsNullOrEmpty(text))
-            Redirect($"index");
+            return Redirect($"index");
 
         _logger.LogDebug(text);
 
@@ -70,10 +69,19 @@ public class IndexModel : PageModel
         //TODO: сохранить в БД text по ключу textKey
         _storage.Set(textKey, text);
 
-        string rankKey = "RANK-" + id;
-        //TODO: посчитать rank и сохранить в БД по ключу rankKey
-        string rank = GetRank(text);
-        _storage.Set(rankKey, rank);
+        CancellationTokenSource cts = new CancellationTokenSource();
+        ConnectionFactory cf = new ConnectionFactory();
+
+        using (IConnection c = cf.CreateConnection())
+        {
+            byte[] data = Encoding.UTF8.GetBytes(id);
+            c.Publish("valuator.processing.rank", data);
+
+            c.Drain();
+
+            c.Close();
+        }
+        cts.Cancel();
 
         return Redirect($"summary?id={id}");
     }
