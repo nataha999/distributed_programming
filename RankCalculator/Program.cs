@@ -9,43 +9,50 @@ namespace RankCalculator
     {
         static void Main(string[] args)
         {
-            ConfigurationOptions redisConfiguration = ConfigurationOptions.Parse("localhost:6379");
-            ConnectionMultiplexer redisConnection = ConnectionMultiplexer.Connect("localhost");
-            IDatabase db = redisConnection.GetDatabase();
             ConnectionFactory cf = new ConnectionFactory();
             IConnection c = cf.CreateConnection();
-            Console.WriteLine("RankCalculator started");
 
             var s = c.SubscribeAsync("valuator.processing.rank", "rankCalculator", (sender, args) =>
             {
-                string id = Encoding.UTF8.GetString(args.Message.Data);
+                string data = Encoding.UTF8.GetString(args.Message.Data);
+                IdAndCountryOfText? structData = JsonSerializer.Deserialize<IdAndCountryOfText>(data);
 
-                string textKey = "TEXT-" + id;
-                string text = db.StringGet(textKey);
+                string dbEnvironmentVariable = $"DB_{structData?.country}";
+                string? dbConnection = Environment.GetEnvironmentVariable(dbEnvironmentVariable);
 
-                string rankKey = "RANK-" + id;
+                if (dbConnection == null)
+                {
+                    return;
+                }
 
-                string rank = GetRank(text);
+                IDatabase savingDb = ConnectionMultiplexer.Connect(ConfigurationOptions.Parse(dbConnection)).GetDatabase();
 
-                db.StringSet(rankKey, rank);
+                string textKey = "TEXT-" + structData?.textId;
+                string? text = savingDb?.StringGet(textKey);
 
-                MessageInfo data = new(textKey, rank);
-                string jsonData = JsonSerializer.Serialize(data);
+                string rankKey = "RANK-" + structData?.textId;
+
+                double rank = GetRank(text);
+
+                savingDb?.StringSet(rankKey, rank);
+                Console.WriteLine($"LOOKUP: {structData?.textId}, {structData?.country}");
+
+                if (structData == null)
+                {
+                    return;
+                }
+                MessageInfo textData = new(structData.textId, rank);
+                string jsonData = JsonSerializer.Serialize(textData);
 
                 byte[] jsonDataEncoded = Encoding.UTF8.GetBytes(jsonData);
 
-                c.Publish("rankCalculated", jsonDataEncoded);
+                c.Publish("valuator.logs.events.rank", jsonDataEncoded);
             });
 
             s.Start();
 
             Console.WriteLine("Press Enter to exit");
             Console.ReadLine();
-
-            s.Unsubscribe();
-
-            c.Drain();
-            c.Close();
         }
 
         static string GetRank(string text)

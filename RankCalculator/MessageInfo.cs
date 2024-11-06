@@ -1,14 +1,24 @@
 namespace RankCalculator
 {
-    public class MessageInfo
+    class MessageInfo
     {
-        public string Id { get; set; }
-        public string Result { get; set; }
-
-        public MessageInfo(string id, string result)
+        public MessageInfo(string id, double data)
         {
-            Id = id;
-            Result = result;
+            this.id = id;
+            this.data = data;
         }
+        public string id { get; set; }
+        public double data { get; set; }
+    }
+
+    class IdAndCountryOfText
+    {
+        public IdAndCountryOfText(string country, string textId)
+        {
+            this.textId = textId;
+            this.country = country;
+        }
+        public string country { get; set; }
+        public string textId { get; set; }
     }
 }

@@ -11,12 +11,10 @@ namespace Valuator.Pages;
 public class SummaryModel : PageModel
 {
     private readonly ILogger<SummaryModel> _logger;
-    private readonly IRedisStorage _storage;
 
-    public SummaryModel(ILogger<SummaryModel> logger, IRedisStorage storage)
+    public SummaryModel(ILogger<SummaryModel> logger)
     {
         _logger = logger;
-        _storage = storage;
     }
 
     public double Rank { get; set; }
@@ -26,8 +24,23 @@ public class SummaryModel : PageModel
     {
         _logger.LogDebug(id);
 
-        //TODO: проинициализировать свойства Rank и Similarity значениями из БД
-        Rank = Convert.ToDouble(_storage.Get("RANK-" + id));
-        Similarity = Convert.ToDouble(_storage.Get("SIMILARITY-" + id));
+        string dbEnvironmentVariable = $"DB_{country}";
+        string? dbConnection = Environment.GetEnvironmentVariable(dbEnvironmentVariable);
+        if (dbConnection == null)
+        {
+            return;
+        }
+        IDatabase db = ConnectionMultiplexer.Connect(ConfigurationOptions.Parse(dbConnection)).GetDatabase();
+
+        string? rankString = db.StringGet($"RANK-{id}");
+        string? similarityString = db.StringGet($"SIMILARITY-{id}");
+
+        if (similarityString == null || rankString == null)
+        {
+            return;
+        }
+
+        Rank = double.Parse(rankString, System.Globalization.CultureInfo.InvariantCulture);
+        Similarity = double.Parse(similarityString, System.Globalization.CultureInfo.InvariantCulture);
     }
 }

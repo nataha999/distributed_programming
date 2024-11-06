@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using static System.Net.Mime.MediaTypeNames;
 using NATS.Client;
 using System.Text;
 using System.Text.Json;
@@ -9,25 +11,37 @@ namespace Valuator.Pages;
 
 public class IndexModel : PageModel
 {
-    public class MessageInfo
-    {
-        public string Id { get; set; }
-        public string Result { get; set; }
-
-        public MessageInfo(string id, string result)
-        {
-            Id = id;
-            Result = result;
-        }
-    }
-
     private readonly ILogger<IndexModel> _logger;
     private readonly IRedisStorage _storage;
+    private readonly IDatabase _db;
+
+    class MessageInfo
+    {
+        public MessageInfo(string id, double data)
+        {
+            Id = id;
+            Data = data;
+        }
+        public string Id { get; set; }
+        public double Data { get; set; }
+    }
+
+    class IdAndCountryOfText
+    {
+        public IdAndCountryOfText(string country, string textId)
+        {
+            this.textId = textId;
+            this.country = country;
+        }
+        public string country { get; set; }
+        public string textId { get; set; }
+    }
 
     public IndexModel(ILogger<IndexModel> logger, IRedisStorage storage)
     {
         _logger = logger;
         _storage = storage;
+        _db = _redisConnection.GetDatabase();
     }
 
     public void OnGet()
@@ -35,60 +49,96 @@ public class IndexModel : PageModel
 
     }
 
-    public IActionResult OnPost(string text)
+    public IActionResult OnPost(string text, string country)
     {
+        _logger.LogDebug(text);
+        _logger.LogDebug(country);
+
+        string id = Guid.NewGuid().ToString();
+
         if (string.IsNullOrEmpty(text))
             return Redirect($"index");
-        else
-        {
-            _logger.LogDebug(text);
 
-            string id = Guid.NewGuid().ToString();
+        string dbEnvironmentVariable = $"DB_{country}";
+
+        _db.StringSet(id, country);
+
+        string? dbConnection = Environment.GetEnvironmentVariable(dbEnvironmentVariable);
+
+        if (dbConnection != null)
+        {
+            IDatabase savingDb = ConnectionMultiplexer.Connect(ConfigurationOptions.Parse(dbConnection)).GetDatabase();
 
             string similarityKey = "SIMILARITY-" + id;
-            //TODO: посчитать similarity и сохранить в БД по ключу similarityKey
-            int similarity = GetSimilarity(text);
-            _storage.Set(similarityKey, similarity.ToString());
+
+            double similarity = GetSimilarity(text, dbConnection);
+            savingDb?.StringSet(similarityKey, similarity);
+            Console.WriteLine($"LOOKUP: {id}, {country}");
 
             string textKey = "TEXT-" + id;
-            //TODO: сохранить в БД text по ключу textKey
-            _storage.Set(textKey, text);
 
-            ConnectionFactory connectionFactory = new ConnectionFactory();
+            savingDb?.StringSet(textKey, text);
+            Console.WriteLine($"LOOKUP: {id}, {country}");
 
-            using (IConnection c = connectionFactory.CreateConnection())
+            CancellationTokenSource cts = new CancellationTokenSource();
+
+            ConnectionFactory cf = new ConnectionFactory();
+
+            using (IConnection c = cf.CreateConnection())
             {
-                byte[] data = Encoding.UTF8.GetBytes(id);
+                IdAndCountryOfText structData = new IdAndCountryOfText(country, id);
+
+                string infoJson = JsonSerializer.Serialize(structData);
+
+                byte[] data = Encoding.UTF8.GetBytes(infoJson);
+
                 c.Publish("valuator.processing.rank", data);
 
-                MessageInfo? info = new(textKey, similarity);
-                string jsonData = JsonSerializer.Serialize(info);
+                MessageInfo textData = new(id, similarity);
 
-                byte[] jsonDataEncoded = Encoding.UTF8.GetBytes(jsonData);
+                infoJson = JsonSerializer.Serialize(textData);
 
-                c.Publish("similarityCalculated", jsonDataEncoded);
+                data = Encoding.UTF8.GetBytes(infoJson);
+
+                c.Publish("valuator.logs.events.similarity", data);
 
                 c.Drain();
 
                 c.Close();
             }
 
-            return Redirect($"summary?id={id}");
+            cts.Cancel();
+
+            return Redirect($"summary?id={id}&country={country}");
         }
+        return Redirect($"index");
     }
 
-    private int GetSimilarity(string text)
+    private double GetSimilarity(string text, string? dbConnection)
     {
-        var keys = _storage.GetKeys();
-        string textPrefix = "TEXT-";
-        foreach (var ch in keys)
+        if (dbConnection == null)
         {
-            if (ch.StartsWith(textPrefix) && _storage.Get(ch) == text)
+            return 0.0;
+        }
+
+        ConfigurationOptions redisConfiguration = ConfigurationOptions.Parse(dbConnection);
+        ConnectionMultiplexer redisConnection = ConnectionMultiplexer.Connect(redisConfiguration);
+        IDatabase savingDb = redisConnection.GetDatabase();
+
+        var keys = redisConnection.GetServer(dbConnection).Keys();
+        double similarity = 0.0;
+        foreach (var key in keys)
+        {
+            if (key.ToString().Substring(0, 4) != "TEXT")
             {
-                return 1;
+                continue;
+            }
+            string? dbText = savingDb?.StringGet(key);
+            if (dbText == text)
+            {
+                similarity = 1.0;
             }
         }
-        return 0;
+        return similarity;
     }
-
 }
