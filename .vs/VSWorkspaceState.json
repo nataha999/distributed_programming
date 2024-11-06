@@ -1,7 +1,10 @@
 {
   "ExpandedNodes": [
-    ""
+    "",
+    "\\nginx\\conf",
+    "\\Valuator\\Pages",
+    "\\Valuator\\Pages\\Shared"
   ],
-  "SelectedNode": "\\Valuator.sln",
+  "SelectedNode": "\\RankCalculator",
   "PreviewInSolutionExplorer": false
 }

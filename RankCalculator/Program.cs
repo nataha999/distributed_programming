@@ -1,6 +1,7 @@
 ﻿using NATS.Client;
 using StackExchange.Redis;
 using System.Text;
+using System.Text.Json;
 
 namespace RankCalculator
 {
@@ -27,6 +28,13 @@ namespace RankCalculator
                 string rank = GetRank(text);
 
                 db.StringSet(rankKey, rank);
+
+                MessageInfo data = new(textKey, rank);
+                string jsonData = JsonSerializer.Serialize(data);
+
+                byte[] jsonDataEncoded = Encoding.UTF8.GetBytes(jsonData);
+
+                c.Publish("rankCalculated", jsonDataEncoded);
             });
 
             s.Start();
